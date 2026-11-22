@@ -14,12 +14,7 @@
       flex-direction: column;
       height: 100vh;
     }
-    header {
-      background: #075e54;
-      color: white;
-      padding: 15px;
-      font-size: 18px;
-    }
+    header { background: #075e54; color: white; padding: 15px; font-size: 18px; }
     #messages {
       flex: 1;
       overflow-y: auto;
@@ -35,43 +30,37 @@
       background: white;
       align-self: flex-start;
     }
-    .msg.me {
-      background: #dcf8c6;
-      align-self: flex-end;
+    .msg.me { background: #dcf8c6; align-self: flex-end; }
+    .msg .name { font-size: 12px; color: #075e54; font-weight: bold; }
+    .msg img, .msg video {
+      max-width: 100%;
+      max-height: 300px;
+      border-radius: 6px;
+      display: block;
+      margin-top: 4px;
     }
-    .msg .name {
-      font-size: 12px;
-      color: #075e54;
-      font-weight: bold;
-    }
-    form {
-      display: flex;
-      padding: 10px;
-      background: #f0f0f0;
-      gap: 8px;
-    }
-    input {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 20px;
-      outline: none;
-    }
+    form { display: flex; padding: 10px; background: #f0f0f0; gap: 8px; align-items: center; }
+    #input { flex: 1; padding: 12px; border: none; border-radius: 20px; outline: none; }
     button {
       background: #075e54;
       color: white;
       border: none;
-      padding: 0 20px;
+      padding: 10px 18px;
       border-radius: 20px;
       cursor: pointer;
     }
+    #attach { background: #e0e0e0; color: #333; font-size: 18px; padding: 8px 12px; }
+    #status { font-size: 12px; padding: 0 12px 6px; background: #f0f0f0; color: #555; display: none; }
   </style>
 </head>
 <body>
   <header>💬 Meri Messenger App</header>
   <div id="messages"></div>
+  <div id="status"></div>
 
   <form id="form">
+    <button type="button" id="attach">📎</button>
+    <input type="file" id="file" accept="image/*,video/*" hidden />
     <input id="input" placeholder="Message likhein..." autocomplete="off" />
     <button>Bhejein</button>
   </form>
@@ -84,6 +73,9 @@
     const form = document.getElementById("form");
     const input = document.getElementById("input");
     const messages = document.getElementById("messages");
+    const attach = document.getElementById("attach");
+    const fileInput = document.getElementById("file");
+    const statusBox = document.getElementById("status");
 
     function addMessage(data) {
       const div = document.createElement("div");
@@ -92,14 +84,29 @@
       const name = document.createElement("div");
       name.className = "name";
       name.textContent = data.name;
-
-      const text = document.createElement("div");
-      text.textContent = data.text;
-
       div.appendChild(name);
-      div.appendChild(text);
+
+      if (data.fileUrl) {
+        const media = document.createElement(data.fileType === "video" ? "video" : "img");
+        media.src = data.fileUrl;
+        if (data.fileType === "video") media.controls = true;
+        media.addEventListener("load", () => { messages.scrollTop = messages.scrollHeight; });
+        div.appendChild(media);
+      }
+
+      if (data.text) {
+        const text = document.createElement("div");
+        text.textContent = data.text;
+        div.appendChild(text);
+      }
+
       messages.appendChild(div);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    function showStatus(t) {
+      statusBox.textContent = t;
+      statusBox.style.display = t ? "block" : "none";
     }
 
     form.addEventListener("submit", (e) => {
@@ -107,6 +114,32 @@
       if (input.value.trim() === "") return;
       socket.emit("chat message", { name: myName, text: input.value });
       input.value = "";
+    });
+
+    attach.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      showStatus("Upload ho raha hai...");
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/upload", { method: "POST", body: fd });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error);
+        socket.emit("chat message", {
+          name: myName,
+          text: input.value,
+          fileUrl: out.url,
+          fileType: out.type,
+        });
+        input.value = "";
+        showStatus("");
+      } catch (err) {
+        showStatus(err.message || "Upload fail ho gaya");
+      }
+      fileInput.value = "";
     });
 
     socket.on("history", (list) => {
@@ -118,3 +151,4 @@
   </script>
 </body>
 </html>
+
